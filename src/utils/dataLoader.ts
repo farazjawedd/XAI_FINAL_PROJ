@@ -1,40 +1,53 @@
 import Papa from 'papaparse';
+import { logEnvironmentInfo, validateDataset, measurePerformance } from './debugHelper';
 
 export interface DataPoint {
   [key: string]: string | number;
 }
 
-export const loadDataset = async (dataset: string): Promise<DataPoint[]> => {
-  let path = '';
+export const loadDataset = async (datasetName: string): Promise<DataPoint[]> => {
+  logEnvironmentInfo();
   
-  switch (dataset) {
-    case 'Adult Income':
-      path = '/src/data/adult_.csv';
-      break;
-    case 'Heart Disease':
-      path = '/src/data/heart.csv';
-      break;
-    case 'Loan Approval':
-      path = '/src/data/loan.csv';
-      break;
-    default:
-      throw new Error('Invalid dataset');
-  }
+  // Use the measuredPerformance utility to time the data loading
+  return await measurePerformance(`Loading ${datasetName}`, async () => {
+    let path = '';
+    
+    switch (datasetName) {
+      case 'Adult Income':
+        path = '/src/data/adult_.csv';
+        break;
+      case 'Heart Disease':
+        path = '/src/data/heart.csv';
+        break;
+      case 'Loan Approval':
+        path = '/src/data/loan.csv';
+        break;
+      default:
+        throw new Error('Invalid dataset');
+    }
 
-  const response = await fetch(path);
-  const csvText = await response.text();
-  
-  return new Promise((resolve, reject) => {
-    Papa.parse(csvText, {
-      header: true,
-      dynamicTyping: true,
-      complete: (results) => {
-        resolve(results.data as DataPoint[]);
-      },
-      error: (error) => {
-        reject(error);
-      }
+    const response = await fetch(path);
+    const csvText = await response.text();
+    
+    const data = await new Promise<DataPoint[]>((resolve, reject) => {
+      Papa.parse(csvText, {
+        header: true,
+        dynamicTyping: true,
+        complete: (results) => {
+          resolve(results.data as DataPoint[]);
+        },
+        error: (error) => {
+          reject(error);
+        }
+      });
     });
+
+    // Before returning, validate the dataset
+    if (!validateDataset(data)) {
+      throw new Error(`Invalid dataset: ${datasetName}`);
+    }
+    
+    return data;
   });
 };
 
