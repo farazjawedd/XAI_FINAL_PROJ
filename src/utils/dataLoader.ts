@@ -9,7 +9,7 @@ export const loadDataset = async (dataset: string): Promise<DataPoint[]> => {
   
   switch (dataset) {
     case 'Adult Income':
-      path = '/src/data/adult.csv';
+      path = '/src/data/adult_.csv';
       break;
     case 'Heart Disease':
       path = '/src/data/heart.csv';

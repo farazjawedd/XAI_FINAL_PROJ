@@ -9,3 +9,12 @@ age,workclass,education,marital-status,occupation,relationship,race,sex,capital-
 52,Self-emp-not-inc,HS-grad,Married-civ-spouse,Exec-managerial,Husband,White,Male,0,0,45,United-States,>50K
 31,Private,Masters,Never-married,Prof-specialty,Not-in-family,White,Female,14084,0,50,United-States,>50K
 42,Private,Bachelors,Married-civ-spouse,Exec-managerial,Husband,White,Male,5178,0,40,United-States,>50K
+40,Private,HS-grad,Married-civ-spouse,Exec-managerial,Husband,White,Male,0,0,40,United-States,<=50K
+35,Self-emp-not-inc,Bachelors,Never-married,Prof-specialty,Not-in-family,Asian,Female,5000,0,50,India,>50K
+45,Private,Masters,Divorced,Handlers-cleaners,Not-in-family,Black,Male,0,0,40,United-States,<=50K
+50,Private,Doctorate,Married-civ-spouse,Exec-managerial,Husband,White,Male,10000,0,60,Canada,>50K
+28,Private,HS-grad,Never-married,Other-service,Not-in-family,Hispanic,Female,0,0,30,Mexico,<=50K
+33,State-gov,Bachelors,Married-civ-spouse,Adm-clerical,Wife,White,Female,2000,0,40,United-States,<=50K
+47,Private,Masters,Divorced,Exec-managerial,Not-in-family,Black,Male,0,0,45,United-States,>50K
+29,Private,HS-grad,Never-married,Handlers-cleaners,Not-in-family,Asian,Female,0,0,35,India,<=50K
+52,Self-emp-not-inc,Doctorate,Married-civ-spouse,Prof-specialty,Husband,White,Male,8000,0,50,United-States,>50K

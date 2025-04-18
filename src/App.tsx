@@ -121,6 +121,15 @@ function App() {
             </div>
           </div>
         )}
+
+        <div className="bg-white p-6 rounded-lg shadow-lg mt-12">
+          <h3 className="text-lg font-semibold">New Features</h3>
+          <ul className="list-disc pl-5 space-y-2 text-gray-700">
+            <li>View dataset summary including rows and columns.</li>
+            <li>Analyze feature importance based on decision tree splits.</li>
+            <li>Export the decision tree as a JSON file for further analysis.</li>
+          </ul>
+        </div>
       </main>
 
       <footer className="bg-white mt-12">
