@@ -14,20 +14,53 @@ export const loadDataset = async (datasetName: string): Promise<DataPoint[]> => 
     
     switch (datasetName) {
       case 'Adult Income':
-        path = '/src/data/adult_.csv';
+        path = 'adult_.csv';
         break;
       case 'Heart Disease':
-        path = '/src/data/heart.csv';
+        path = 'heart.csv';
         break;
       case 'Loan Approval':
-        path = '/src/data/loan.csv';
+        path = 'loan.csv';
         break;
       default:
         throw new Error('Invalid dataset');
     }
 
-    const response = await fetch(path);
-    const csvText = await response.text();
+    // Try multiple possible paths for different deployment environments
+    const possiblePaths = [
+      `/src/data/${path}`,          // Local development with Vite
+      `/data/${path}`,              // Some deployments
+      `/${path}`,                   // Root directory
+      `https://raw.githubusercontent.com/farazjawedd/XAI_FINAL_PROJ/main/public/data/${path}` // Direct GitHub link as fallback
+    ];
+    
+    let csvText = '';
+    let loadError: Error | null = null;
+    
+    // Try each possible path until one works
+    for (const testPath of possiblePaths) {
+      try {
+        console.log(`Attempting to load from: ${testPath}`);
+        const response = await fetch(testPath, { cache: 'no-store' });
+        if (!response.ok) {
+          console.log(`Failed to load from ${testPath}: ${response.status}`);
+          continue;
+        }
+        
+        csvText = await response.text();
+        if (csvText && csvText.length > 0) {
+          console.log(`Successfully loaded ${csvText.length} bytes from ${testPath}`);
+          break;
+        }
+      } catch (e) {
+        console.log(`Error loading from ${testPath}:`, e);
+        loadError = e instanceof Error ? e : new Error(String(e));
+      }
+    }
+    
+    if (!csvText) {
+      throw loadError || new Error(`Failed to load dataset ${datasetName} from any path`);
+    }
     
     const data = await new Promise<DataPoint[]>((resolve, reject) => {
       Papa.parse(csvText, {

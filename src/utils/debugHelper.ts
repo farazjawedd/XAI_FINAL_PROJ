@@ -9,7 +9,9 @@ export const logEnvironmentInfo = () => {
     baseUrl: window.location.origin,
     deploymentPlatform: typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') 
       ? 'Vercel' 
-      : 'Other/Local'
+      : window.location.hostname.includes('netlify.app')
+        ? 'Netlify'
+        : 'Other/Local'
   });
 };
 

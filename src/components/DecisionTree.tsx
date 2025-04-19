@@ -59,57 +59,64 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
         setInputData({});
 
         console.log(`Loading dataset: ${dataset}`);
-        const data = await loadDataset(dataset);
         
-        // Log data size to help debug
-        console.log(`Loaded ${data?.length ?? 0} rows of data`);
-        
-        // Ensure we have data before proceeding
-        if (!data || data.length === 0) {
-          setError("No data available or empty dataset");
-          setLoading(false);
-          return;
-        }
-
-        // Correctly identify the target column for this dataset
-        const targetColumn = getTargetColumn(dataset);
-        console.log(`Target column: ${targetColumn}`);
-        
-        // Build the decision tree with a timeout to ensure UI responsiveness
-        setTimeout(() => {
-          try {
-            const tree = buildDecisionTree(data, targetColumn);
-            setTreeData(tree);
-
-            // Update dataset summary to reflect the actual rows and columns
-            setDatasetSummary({
-              rows: data.length,
-              columns: Object.keys(data[0]).length,
-            });
-
-            const featureInputs = extractFeatureInputs(data);
-            setFeatures(featureInputs);
-
-            // Initialize input data with default feature values
-            const defaultInputData = Object.fromEntries(
-              featureInputs.map((f) => [f.name, f.value])
-            );
-            setInputData(defaultInputData);
-
-            const importance = calculateFeatureImportance(tree);
-            setFeatureImportance(importance);
-            
-            console.log('Decision tree built successfully');
-          } catch (treeErr) {
-            console.error("Error building tree:", treeErr);
-            setError(treeErr instanceof Error ? treeErr.message : 'Failed to build decision tree');
-          } finally {
+        try {
+          const data = await loadDataset(dataset);
+          
+          // Log data size to help debug
+          console.log(`Loaded ${data?.length ?? 0} rows of data`);
+          
+          // Ensure we have data before proceeding
+          if (!data || data.length === 0) {
+            setError("No data available or empty dataset");
             setLoading(false);
+            return;
           }
-        }, 100);
+
+          // Correctly identify the target column for this dataset
+          const targetColumn = getTargetColumn(dataset);
+          console.log(`Target column: ${targetColumn}`);
+          
+          // Build the decision tree with a timeout to ensure UI responsiveness
+          setTimeout(() => {
+            try {
+              const tree = buildDecisionTree(data, targetColumn);
+              setTreeData(tree);
+
+              // Update dataset summary to reflect the actual rows and columns
+              setDatasetSummary({
+                rows: data.length,
+                columns: Object.keys(data[0]).length,
+              });
+
+              const featureInputs = extractFeatureInputs(data);
+              setFeatures(featureInputs);
+
+              // Initialize input data with default feature values
+              const defaultInputData = Object.fromEntries(
+                featureInputs.map((f) => [f.name, f.value])
+              );
+              setInputData(defaultInputData);
+
+              const importance = calculateFeatureImportance(tree);
+              setFeatureImportance(importance);
+              
+              console.log('Decision tree built successfully');
+            } catch (treeErr) {
+              console.error("Error building tree:", treeErr);
+              setError(treeErr instanceof Error ? treeErr.message : 'Failed to build decision tree');
+            } finally {
+              setLoading(false);
+            }
+          }, 100);
+        } catch (dataErr) {
+          console.error("Error loading dataset:", dataErr);
+          setError(`Failed to load dataset: ${dataErr instanceof Error ? dataErr.message : String(dataErr)}`);
+          setLoading(false);
+        }
       } catch (err) {
-        console.error("Error loading dataset:", err);
-        setError(err instanceof Error ? err.message : 'Failed to load dataset');
+        console.error("Unexpected error:", err);
+        setError(err instanceof Error ? err.message : 'An unexpected error occurred');
         setLoading(false);
       }
     };
