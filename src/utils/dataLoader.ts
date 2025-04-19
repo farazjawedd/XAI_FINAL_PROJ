@@ -27,11 +27,15 @@ export const loadDataset = async (datasetName: string): Promise<DataPoint[]> => 
     }
 
     // Try multiple possible paths for different deployment environments
+    // Focus on direct GitHub raw URLs first for deployment reliability
     const possiblePaths = [
-      `/src/data/${path}`,          // Local development with Vite
-      `/data/${path}`,              // Some deployments
-      `/${path}`,                   // Root directory
-      `https://raw.githubusercontent.com/farazjawedd/XAI_FINAL_PROJ/main/public/data/${path}` // Direct GitHub link as fallback
+      // Direct GitHub raw URLs - most reliable for deployment
+      `https://raw.githubusercontent.com/farazjawedd/XAI_FINAL_PROJ/refs/heads/main/src/data/${path}`,
+      `https://raw.githubusercontent.com/farazjawedd/XAI_FINAL_PROJ/main/src/data/${path}`,
+      // Fallback to local paths for development
+      `/src/data/${path}`,
+      `/data/${path}`,
+      `/${path}`
     ];
     
     let csvText = '';
@@ -41,16 +45,24 @@ export const loadDataset = async (datasetName: string): Promise<DataPoint[]> => 
     for (const testPath of possiblePaths) {
       try {
         console.log(`Attempting to load from: ${testPath}`);
-        const response = await fetch(testPath, { cache: 'no-store' });
+        const response = await fetch(testPath, { 
+          cache: 'no-store',
+          headers: {
+            'Accept': 'text/csv,application/octet-stream'
+          }
+        });
+        
         if (!response.ok) {
           console.log(`Failed to load from ${testPath}: ${response.status}`);
           continue;
         }
         
         csvText = await response.text();
-        if (csvText && csvText.length > 0) {
+        if (csvText && csvText.length > 100) { // Ensure we got meaningful content
           console.log(`Successfully loaded ${csvText.length} bytes from ${testPath}`);
           break;
+        } else {
+          console.log(`Got empty or very small response from ${testPath}, length: ${csvText.length}`);
         }
       } catch (e) {
         console.log(`Error loading from ${testPath}:`, e);
