@@ -265,33 +265,53 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
   };
 
   const highlightDecisionPath = (tree: TreeNode, input: { [key: string]: string | number }) => {
-    const path: TreeNode[] = [];
-    let currentNode = tree;
-
-    // Traverse the tree to find the decision path
-    while (currentNode.children) {
-      path.push(currentNode);
-      const feature = currentNode.feature!;
+    if (!tree) return;
+    
+    // Create hierarchy from tree data
+    const hierarchy = d3.hierarchy(tree);
+    
+    // Find the path through the tree based on input values
+    const path: d3.HierarchyNode<TreeNode>[] = [];
+    let currentNode = hierarchy;
+    
+    // Add the root node
+    path.push(currentNode);
+    
+    // Traverse the tree until we reach a leaf node
+    while (currentNode.children && currentNode.children.length > 0) {
+      const feature = currentNode.data.feature;
+      if (!feature || !(feature in input)) {
+        break;
+      }
+      
       const value = input[feature];
-      const threshold = currentNode.threshold;
+      const threshold = currentNode.data.threshold;
       const isNumeric = typeof threshold === 'number';
-
+      
+      let nextNode;
       if (isNumeric) {
-        currentNode = Number(value) <= threshold
+        nextNode = Number(value) <= Number(threshold)
           ? currentNode.children[0]
           : currentNode.children[1];
       } else {
-        currentNode = String(value) === String(threshold)
+        nextNode = String(value) === String(threshold)
           ? currentNode.children[0]
           : currentNode.children[1];
       }
+      
+      if (!nextNode) break;
+      
+      path.push(nextNode);
+      currentNode = nextNode;
     }
-
-    path.push(currentNode); // Add the leaf node
-    setSelectedPath(path.map((node) => d3.hierarchy(node))); // Update the selected path
-
-    // Debugging: Log the decision path
-    console.log("Decision Path:", path.map((node) => node.name));
+    
+    // Set this as the selected path
+    setSelectedPath(path);
+    
+    // Log the path for debugging
+    console.log("Decision Path:", path.map(node => 
+      node.data.feature ? `${node.data.feature} ${node.data.condition || ''}` : `Prediction: ${node.data.name}`
+    ));
   };
 
   const exportTree = () => {
@@ -448,8 +468,84 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
       .data(treeLayout.descendants())
       .join("g")
       .attr("class", (d) => "node" + (d.children ? " node--internal" : " node--leaf"))
-      .attr("transform", (d) => `translate(${d.y},${d.x})`);
+      .attr("transform", (d) => `translate(${d.y},${d.x})`)
+      .on("mouseover", (event, d) => {
+        // Set the hovered node state on mouse over
+        setHoveredNode(d);
+        
+        // Create tooltip if needed
+        if (tooltipRef.current) {
+          const tooltip = d3.select(tooltipRef.current);
+          tooltip
+            .style("visibility", "visible")
+            .style("position", "absolute")
+            .style("background", "white")
+            .style("padding", "10px")
+            .style("border-radius", "5px")
+            .style("box-shadow", "0 0 10px rgba(0,0,0,0.1)")
+            .style("left", `${event.pageX + 15}px`)
+            .style("top", `${event.pageY - 28}px`)
+            .html(`
+              <div class="font-semibold">${d.data.feature || d.data.name}</div>
+              ${d.data.condition ? `<div>${d.data.condition}</div>` : ''}
+              ${d.data.confidence ? `<div>Confidence: ${(d.data.confidence * 100).toFixed(1)}%</div>` : ''}
+              ${d.data.samples ? `<div>Samples: ${d.data.samples}</div>` : ''}
+            `);
+        }
+      })
+      .on("mouseout", () => {
+        // Clear hovered node state on mouse out 
+        setHoveredNode(null);
+        
+        // Hide tooltip
+        if (tooltipRef.current) {
+          d3.select(tooltipRef.current).style("visibility", "hidden");
+        }
+      })
+      .on("click", (event, d) => {
+        event.stopPropagation(); // Stop event propagation to prevent parent handlers
+        
+        if (d.data.feature) {
+          // For a decision node, find the path from root to this node
+          const path: d3.HierarchyNode<TreeNode>[] = [];
+          let current: d3.HierarchyNode<TreeNode> | null = d;
+          
+          while (current) {
+            path.unshift(current); // Add to beginning of array
+            current = current.parent;
+          }
+          
+          // Set this as the selected path
+          setSelectedPath(path);
+          
+          // If we have input data, try to predict and show the full path
+          if (Object.keys(inputData).length > 0) {
+            try {
+              // Find path from this node to a leaf node
+              const remainingPath = findPathToLeaf(d, inputData);
+              if (remainingPath.length > 0) {
+                // Add remaining path to selected path (excluding first node which is already included)
+                setSelectedPath([...path, ...remainingPath.slice(1)]);
+              }
+            } catch (err) {
+              console.error("Error finding path to leaf:", err);
+            }
+          }
+        } else {
+          // For a leaf node, find path from root to this leaf
+          const path: d3.HierarchyNode<TreeNode>[] = [];
+          let current: d3.HierarchyNode<TreeNode> | null = d;
+          
+          while (current) {
+            path.unshift(current); // Add to beginning of array  
+            current = current.parent;
+          }
+          
+          setSelectedPath(path);
+        }
+      });
 
+    // Add circles for nodes
     nodes
       .append("circle")
       .attr("r", (d) => {
@@ -503,7 +599,7 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
       .style("font-size", "10px")
       .style("fill", "#6b7280")
       .text((d) => (d.data.samples ? `Samples: ${d.data.samples}` : ""));
-  }, [treeData, selectedPath, loading, dimensions]);
+  }, [treeData, selectedPath, loading, dimensions, inputData]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -521,6 +617,60 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
 
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    const svgElement = svgRef.current;
+    if (!svgElement) return;
+    
+    const handleBackgroundClick = (event: MouseEvent) => {
+      // Only clear if clicking directly on the SVG background, not on a node
+      if (event.target === svgElement || (event.target as Element).tagName === 'svg') {
+        setSelectedPath([]);
+      }
+    };
+    
+    svgElement.addEventListener('click', handleBackgroundClick);
+    return () => {
+      svgElement.removeEventListener('click', handleBackgroundClick);
+    };
+  }, []);
+
+  const findPathToLeaf = (
+    startNode: d3.HierarchyNode<TreeNode>, 
+    input: { [key: string]: string | number }
+  ): d3.HierarchyNode<TreeNode>[] => {
+    const path: d3.HierarchyNode<TreeNode>[] = [startNode];
+    let currentNode = startNode;
+    
+    // Continue traversing until we reach a leaf node (no children)
+    while (currentNode.children && currentNode.children.length > 0) {
+      // Get the feature and value from the node
+      const feature = currentNode.data.feature;
+      if (!feature) break;
+      
+      const value = input[feature];
+      if (value === undefined) break;
+      
+      const threshold = currentNode.data.threshold;
+      const isNumeric = typeof threshold === 'number';
+      
+      let nextNode;
+      if (isNumeric) {
+        nextNode = Number(value) <= Number(threshold)
+          ? currentNode.children[0]
+          : currentNode.children[1];
+      } else {
+        nextNode = String(value) === String(threshold)
+          ? currentNode.children[0]
+          : currentNode.children[1];
+      }
+      
+      path.push(nextNode);
+      currentNode = nextNode;
+    }
+    
+    return path;
+  };
 
   if (loading) {
     return (
@@ -540,6 +690,41 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
 
   return (
     <div className="space-y-4">
+      {/* Decision Path - Moved to top */}
+      {selectedPath.length > 0 && (
+        <div className="bg-white p-6 rounded-lg shadow-lg">
+          <h4 className="text-xl font-semibold text-gray-900 mb-4">Decision Path</h4>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedPath.map((node, index) => (
+              <React.Fragment key={index}>
+                {index > 0 && (
+                  <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
+                <div className={`px-3 py-2 rounded-lg ${
+                  node.data.feature 
+                    ? 'bg-indigo-50 text-indigo-800' 
+                    : 'bg-indigo-600 text-white'
+                }`}>
+                  {node.data.feature ? (
+                    <>
+                      <span className="font-medium">{node.data.feature}</span>
+                      {node.data.condition && 
+                        <span className="ml-1">({node.data.condition})</span>}
+                    </>
+                  ) : (
+                    <span className="font-medium">
+                      Predict: {node.data.name}
+                    </span>
+                  )}
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      )}
+
       {datasetSummary && (
         <div className="bg-white p-4 rounded-lg shadow-lg">
           <h3 className="text-lg font-semibold">Dataset Summary</h3>
@@ -583,6 +768,15 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
           <Sliders className="w-5 h-5 text-indigo-600" />
           <h3 className="text-lg font-semibold">Interactive Feature Controls:</h3>
         </div>
+        {prediction && (
+          <div className="mb-4 p-4 bg-indigo-50 rounded-lg">
+            <h4 className="font-semibold text-indigo-900">Current Prediction:</h4>
+            <p className="text-indigo-700">
+              {prediction} 
+              {confidence && ` (${(confidence * 100).toFixed(1)}% confidence)`}
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {features.map((feature) => (
             <div key={feature.name} className="space-y-2">
@@ -595,19 +789,19 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
                     type="range"
                     min={feature.min}
                     max={feature.max}
-                    value={inputData[feature.name]}
+                    value={inputData[feature.name] || feature.min}
                     onChange={(e) => handleFeatureChange(feature.name, Number(e.target.value))}
                     className="w-full"
                   />
                   <div className="flex justify-between text-sm text-gray-500">
                     <span>{feature.min}</span>
-                    <span>{inputData[feature.name]}</span>
+                    <span>{inputData[feature.name] || feature.min}</span>
                     <span>{feature.max}</span>
                   </div>
                 </div>
               ) : (
                 <select
-                  value={inputData[feature.name]}
+                  value={inputData[feature.name] || ''}
                   onChange={(e) => handleFeatureChange(feature.name, e.target.value)}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 >
@@ -621,15 +815,6 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
             </div>
           ))}
         </div>
-        {prediction && (
-          <div className="mt-4 p-4 bg-indigo-50 rounded-lg">
-            <h4 className="font-semibold text-indigo-900">Current Prediction:</h4>
-            <p className="text-indigo-700">
-              {prediction} 
-              {confidence && ` (${(confidence * 100).toFixed(1)}% confidence)`}
-            </p>
-          </div>
-        )}
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow-lg">
@@ -650,9 +835,20 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
           ref={svgRef} 
           className="w-full"
           style={{ minWidth: '1200px', minHeight: '800px' }}
-          onClick={() => setSelectedPath([])}
         ></svg>
-        <div ref={tooltipRef}></div>
+        <div 
+          ref={tooltipRef} 
+          className="tooltip"
+          style={{
+            position: 'absolute',
+            visibility: 'hidden',
+            backgroundColor: 'white',
+            padding: '10px',
+            borderRadius: '5px',
+            boxShadow: '0 0 10px rgba(0,0,0,0.1)',
+            zIndex: 1000
+          }}
+        ></div>
       </div>
       
       {hoveredNode && (
@@ -665,35 +861,6 @@ const DecisionTree: React.FC<DecisionTreeProps> = ({ dataset }) => {
             {hoveredNode.data.confidence && 
               ` (${(hoveredNode.data.confidence * 100).toFixed(1)}% confidence)`}
           </p>
-        </div>
-      )}
-
-      {selectedPath.length > 0 && (
-        <div className="bg-white p-4 rounded-lg shadow">
-          <h4 className="font-semibold text-gray-900 mb-2">Decision Path</h4>
-          <div className="space-y-2">
-            {selectedPath.map((node, index) => (
-              <div 
-                key={index} 
-                className="flex items-center space-x-2"
-              >
-                {index > 0 && <span className="text-gray-400">→</span>}
-                <span className="text-gray-700">
-                  {node.data.feature ? (
-                    <>
-                      <span className="font-medium">{node.data.feature}</span>
-                      {node.data.condition && 
-                        <span className="text-gray-500"> ({node.data.condition})</span>}
-                    </>
-                  ) : (
-                    <span className="font-medium text-indigo-600">
-                      Predict: {node.data.name}
-                    </span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>

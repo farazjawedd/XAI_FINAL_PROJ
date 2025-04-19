@@ -17,7 +17,7 @@ export const loadDataset = async (datasetName: string): Promise<DataPoint[]> => 
         path = 'adult_.csv';
         break;
       case 'Heart Disease':
-        path = 'heart.csv';
+        path = 'heart_.csv'; // Changed from heart.csv to heart_.csv
         break;
       case 'Loan Approval':
         path = 'loan.csv';
